@@ -19,38 +19,57 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.7'
 
-      - name: Generate Keystore and Build Signed Release APK
+      - name: Build and Sign Release APK
+        env:
+          KEYSTORE_PASSWORD: paper1mock123
+          KEY_ALIAS: paper1mock
+          KEY_PASSWORD: paper1mock123
         run: |
-          # Automatically find the directory containing settings.gradle (in case files were uploaded inside a subfolder)
-          PROJECT_DIR=$(dirname $(find . -name "settings.gradle" | head -n 1))
-          echo "Found Android project in: $PROJECT_DIR"
-          cd "$PROJECT_DIR"
+          # Generate keystore in BOTH root and app/ directory so any relative path in build.gradle succeeds
+          keytool -genkeypair -v \
+            -keystore release-key.jks \
+            -alias paper1mock \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass paper1mock123 \
+            -keypass paper1mock123 \
+            -dname "CN=IndoreFlorist, OU=Education, O=IndoreFlorist, L=Indore, ST=MP, C=IN"
+          cp release-key.jks app/release-key.jks
 
-          # Generate release keystore if not present
-          if [ ! -f "release-key.jks" ]; then
-            keytool -genkeypair -v \
-              -keystore release-key.jks \
-              -alias paper1mock \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -storepass paper1mock123 \
-              -keypass paper1mock123 \
-              -dname "CN=IndoreFlorist, OU=Education, O=IndoreFlorist, L=Indore, ST=MP, C=IN"
+          # Accept all Android SDK licenses automatically
+          yes | sdkmanager --licenses || true
+
+          # Build Release APK with stacktrace in case of syntax error
+          gradle assembleRelease --no-daemon --stacktrace
+
+          # Locate the generated APK (signed or unsigned)
+          APK_PATH=$(find app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+          echo "Found generated APK at: $APK_PATH"
+
+          # If it is unsigned, sign it with Android SDK apksigner
+          if [[ "$APK_PATH" == *"unsigned"* ]]; then
+            BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
+            "$BUILD_TOOLS_DIR/zipalign" -v -p 4 "$APK_PATH" aligned.apk
+            "$BUILD_TOOLS_DIR/apksigner" sign \
+              --ks release-key.jks \
+              --ks-key-alias paper1mock \
+              --ks-pass pass:paper1mock123 \
+              --key-pass pass:paper1mock123 \
+              --out "$GITHUB_WORKSPACE/Paper-1-Mock.apk" \
+              aligned.apk
+          else
+            cp "$APK_PATH" "$GITHUB_WORKSPACE/Paper-1-Mock.apk"
           fi
 
-          # Compile and sign the release APK using Gradle 8.7
-          gradle assembleRelease --no-daemon
-
-          # Copy APK to root workspace for easy artifact upload
-          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/Paper-1-Mock.apk"
-          
-          # Print exact size in bytes and KB
           BYTES=$(stat -c%s "$GITHUB_WORKSPACE/Paper-1-Mock.apk")
           echo "### ✅ APK Built Successfully!" >> $GITHUB_STEP_SUMMARY
           echo "- **File Name:** \`Paper-1-Mock.apk\`" >> $GITHUB_STEP_SUMMARY
