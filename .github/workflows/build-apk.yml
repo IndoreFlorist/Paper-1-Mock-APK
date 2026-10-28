@@ -25,15 +25,15 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.9'
 
-      - name: Build and Sign Release APK
+      - name: Generate Keystore and Build Signed Release APK
         env:
           KEYSTORE_PASSWORD: paper1mock123
           KEY_ALIAS: paper1mock
           KEY_PASSWORD: paper1mock123
         run: |
-          # Generate keystore in BOTH root and app/ directory so any relative path in build.gradle succeeds
+          # Generate release keystore in both root and app/ directory
           keytool -genkeypair -v \
             -keystore release-key.jks \
             -alias paper1mock \
@@ -45,17 +45,16 @@ jobs:
             -dname "CN=IndoreFlorist, OU=Education, O=IndoreFlorist, L=Indore, ST=MP, C=IN"
           cp release-key.jks app/release-key.jks
 
-          # Accept all Android SDK licenses automatically
+          # Accept SDK licenses
           yes | sdkmanager --licenses || true
 
-          # Build Release APK with stacktrace in case of syntax error
+          # Compile and sign the release APK using Gradle 8.9
           gradle assembleRelease --no-daemon --stacktrace
 
-          # Locate the generated APK (signed or unsigned)
+          # Locate the output APK and sign if needed
           APK_PATH=$(find app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
           echo "Found generated APK at: $APK_PATH"
 
-          # If it is unsigned, sign it with Android SDK apksigner
           if [[ "$APK_PATH" == *"unsigned"* ]]; then
             BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
             "$BUILD_TOOLS_DIR/zipalign" -v -p 4 "$APK_PATH" aligned.apk
@@ -70,6 +69,7 @@ jobs:
             cp "$APK_PATH" "$GITHUB_WORKSPACE/Paper-1-Mock.apk"
           fi
 
+          # Print exact size in bytes and KB
           BYTES=$(stat -c%s "$GITHUB_WORKSPACE/Paper-1-Mock.apk")
           echo "### ✅ APK Built Successfully!" >> $GITHUB_STEP_SUMMARY
           echo "- **File Name:** \`Paper-1-Mock.apk\`" >> $GITHUB_STEP_SUMMARY
