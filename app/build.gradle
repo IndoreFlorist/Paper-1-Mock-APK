@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'in.indoreflorist.paper1mock'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "in.indoreflorist.paper1mock"
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    signingConfigs {
+        release {
+            def keystoreFile = file(System.getenv("KEYSTORE_PATH") ?: "${rootProject.projectDir}/release.keystore")
+            if (keystoreFile.exists()) {
+                storeFile keystoreFile
+                storePassword System.getenv("KEYSTORE_PASSWORD") ?: "paper1mockpass"
+                keyAlias System.getenv("KEY_ALIAS") ?: "paper1mock"
+                keyPassword System.getenv("KEY_PASSWORD") ?: "paper1mockpass"
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            crunchPngs true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+
+            def keystoreFile = file(System.getenv("KEYSTORE_PATH") ?: "${rootProject.projectDir}/release.keystore")
+            signingConfig keystoreFile.exists() ? signingConfigs.release : signingConfigs.debug
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    packaging {
+        resources {
+            excludes += [
+                'META-INF/**',
+                'kotlin/**',
+                '**.properties',
+                '**.bin'
+            ]
+        }
+    }
+}
+
+dependencies {
+    // Zero dependencies for ultra-small APK size (< 60 KB)
+}
